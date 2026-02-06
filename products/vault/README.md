@@ -1,22 +1,32 @@
 # HashiCorp Vault Enterprise - GCP Marketplace
 
-This is the GCP Marketplace Click-to-Deploy package for **HashiCorp Vault Enterprise**
-using **Raft integrated storage** on GKE. It is designed to be self-contained: no
-external database is required.
+⚠️ **TESTING ONLY - NOT FOR PRODUCTION USE** ⚠️
+
+This is the GCP Marketplace Click-to-Deploy package for **Vault Enterprise**
+using a **file storage backend** on GKE. This architecture is designed for testing
+and evaluation purposes only.
 
 ## Architecture Overview
 
 - **Type**: Kubernetes App (Click-to-Deploy via `mpdev`)
-- **Storage**: Raft integrated storage with PVCs
+- **Storage**: File storage backend with PersistentVolume (100Gi)
+- **Deployment**: Single replica Deployment (no high availability)
 - **License**: Vault Enterprise license injected via `VAULT_LICENSE` env var
 - **Images**: Vault Enterprise base image from Docker Hub
 - **Billing**: UBB agent sidecar for GCP Marketplace usage reporting
+
+**⚠️ Testing-Only Limitations:**
+- **No High Availability**: Single pod only - pod failure means service downtime
+- **No Replication**: File backend does not support HA or data replication
+- **No Clustering**: Single-node deployment with no Raft or cluster configuration
+- **Limited Performance**: File backend has lower throughput than integrated storage
+- **Data Persistence**: All data stored on a single PersistentVolume - if PV is deleted, all data is lost
 
 ### Components
 
 | Component | Purpose |
 |-----------|---------|
-| `vault` StatefulSet | Vault Enterprise servers (default 3 replicas) |
+| `vault` Deployment | Vault Enterprise server (fixed at 1 replica) |
 | `vault-init` | Init container for pre-flight checks |
 | `ubbagent` | Usage-based billing sidecar |
 | `deployer` | Marketplace deployer image |
@@ -26,9 +36,7 @@ external database is required.
 
 | Service | Type | Purpose |
 |---------|------|---------|
-| `$name-vault-internal` | Headless | Pod DNS + Raft communication |
-| `$name-vault` | ClusterIP | Vault API (active node only) |
-| `$name-vault-ui` | ClusterIP | Vault UI access |
+| `$name-vault` | ClusterIP | Vault API + UI access |
 
 ## Prerequisites
 
@@ -99,29 +107,32 @@ REGISTRY=$REGISTRY TAG=$TAG make app/verify
 Vault deploys **sealed**. Initialize and unseal before use.
 
 ```bash
+# Get the pod name
+POD_NAME=$(kubectl get pods -n $namespace -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].metadata.name}')
+
 # Initialize
-kubectl exec -it $name-vault-0 -n $namespace -- vault operator init
+kubectl exec -it $POD_NAME -n $namespace -- vault operator init
 
 # Unseal (run 3 times with different keys)
-kubectl exec -it $name-vault-0 -n $namespace -- vault operator unseal
+kubectl exec -it $POD_NAME -n $namespace -- vault operator unseal
 ```
 
 ### Access the UI
 
 ```bash
-kubectl port-forward svc/$name-vault-ui -n $namespace 8200:8200
+kubectl port-forward svc/$name-vault -n $namespace 8200:8200
 ```
 
 Open: `https://localhost:8200`
 
-## Resource Defaults (Raft Guide Baseline)
+## Resource Defaults
 
 Vault server pods default to:
 
 - **Requests**: `cpu: 2000m`, `memory: 8Gi`
 - **Limits**: `cpu: 2000m`, `memory: 16Gi`
 
-These align with the Raft deployment guide and can be overridden via schema inputs:
+These can be overridden via schema inputs:
 
 - `vaultResourcesRequestsCpu`
 - `vaultResourcesRequestsMemory`
@@ -132,9 +143,7 @@ These align with the Raft deployment guide and can be overridden via schema inpu
 
 | Property | Default | Description |
 |---------|---------|-------------|
-| `replicas` | 3 | Vault server replicas |
-| `storageClass` | SSD | Storage class for PVCs |
-| `storageSize` | 10Gi | PVC size per replica |
+| `storageSize` | 100Gi | PersistentVolume size for Vault data |
 | `vaultLicense` | required | Enterprise license (masked) |
 | `reportingSecret` | required | Marketplace billing secret |
 | `vaultResourcesRequestsCpu` | 2000m | CPU request per pod |
@@ -150,13 +159,17 @@ These align with the Raft deployment guide and can be overridden via schema inpu
 |-------|-------|-----|
 | `ImagePullBackOff` | Wrong tag or registry config | Verify `TAG`, run `gcloud auth configure-docker us-docker.pkg.dev` |
 | `license is not valid` | Missing/expired license | Verify `vaultLicense` secret |
-| `Raft timeout` | Pod communication issues | Check headless service and networking |
 | `vault status` exit 2 | Vault is sealed | Unseal with `vault operator unseal` |
+| PVC not binding | Storage class issues | Check PVC status: `kubectl get pvc -n $namespace` |
 
 ### Verify Enterprise
 
 ```bash
-kubectl logs -n $namespace $name-vault-0 -c vault | grep "Enterprise"
+# Get the pod name
+POD_NAME=$(kubectl get pods -n $namespace -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].metadata.name}')
+
+# Check logs for Enterprise
+kubectl logs -n $namespace $POD_NAME -c vault | grep "Enterprise"
 ```
 
 ## Cleanup
