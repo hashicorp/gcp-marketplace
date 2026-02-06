@@ -35,21 +35,15 @@ REGISTRY=gcr.io/$PROJECT_ID TAG=1.1.3 make app/verify
 
 ## Architecture
 
-This is a GCP Marketplace deployer for HashiCorp Terraform Enterprise using **Kubernetes App (mpdev)** model with **External Services mode** (Cloud SQL PostgreSQL, Memorystore Redis, GCS bucket).
+**⚠️  TESTING ONLY - NOT FOR PRODUCTION ⚠️**
 
-### Infrastructure Provisioning
+This is a GCP Marketplace deployer for HashiCorp Terraform Enterprise using **Kubernetes App (mpdev)** model with **disk mode** and PersistentVolume storage.
 
-Infrastructure must be pre-provisioned using Terraform before deploying TFE:
-- Location: `terraform/` directory
-- Resources: Cloud SQL, Memorystore Redis, GCS bucket
-
-**Terraform commands:**
-```bash
-cd terraform
-terraform init
-terraform apply -var="project_id=YOUR_PROJECT"
-terraform output marketplace_inputs  # Values for Marketplace form
-```
+### Deployment Model
+- **Mode**: Disk mode (TFE_OPERATIONAL_MODE=disk)
+- **Replicas**: Fixed at 1 (no HA)
+- **Storage**: PersistentVolumeClaim (100Gi, ReadWriteOnce)
+- **External Services**: None - fully self-contained
 
 ### Application Deployment
 - Deployer: `deployer/Dockerfile` (uses `deployer_helm` base)
@@ -67,9 +61,9 @@ apptest/tester/Dockerfile      → gcr.io/.../terraform-enterprise/tester:TAG
 ### Key Files
 - `schema.yaml` - GCP Marketplace schema defining user inputs
 - `apptest/deployer/schema.yaml` - Test schema with default values for mpdev verify
-- `chart/terraform-enterprise/` - Helm chart for TFE deployment
+- `chart/terraform-enterprise/` - Helm chart for Terraform Enterprise deployment
+- `chart/terraform-enterprise/templates/pvc.yaml` - PersistentVolumeClaim for data
 - `deployer/Dockerfile` - mpdev deployer using deployer_helm base
-- `terraform/` - Infrastructure provisioning (Cloud SQL, Redis, GCS)
 
 ### Shared Makefiles
 - `../../shared/Makefile.common` - Docker build flags for GCP Marketplace compliance
@@ -88,15 +82,12 @@ Image tags use full semver (e.g., `1.1.3`) with an additional **minor version** 
 # Check pod status
 kubectl get pods -n <namespace>
 
-# Check TFE container logs
+# Check Terraform Enterprise container logs
 kubectl logs -n <namespace> <pod-name> -c terraform-enterprise
-
-# Check vault-manager logs (common failure point)
-kubectl logs -n <namespace> <pod-name> -c terraform-enterprise | grep vault
 
 # Health check endpoint
 curl -k https://<lb-ip>/_health_check
-# Expected: {"postgres":"UP","redis":"UP","vault":"UP"}
+# Expected: {"status":"ok"} or similar (disk mode doesn't check external services)
 ```
 
 **Common mpdev verify errors and fixes:**
@@ -105,28 +96,14 @@ curl -k https://<lb-ip>/_health_check
 |-------|-------|-----|
 | `Invalid schema publishedVersion` | publishedVersion needs full semver | Use `1.1.3` not `1.1` in both schema.yaml files |
 | `ImagePullBackOff` | Image tag doesn't exist in GCR | Run `make app/build` with matching TAG |
-| `vault-manager crash loop` | Missing encryption password or stale data | Ensure encryption password is set. Clean vault_* tables in PostgreSQL and flush Redis |
+| `PVC pending` | No available PersistentVolume | Check storage class and PV availability |
 | `Startup probe timeout` | TFE takes too long to start | Deployer sets WAIT_FOR_READY_TIMEOUT=1800 |
 
 **Pre-flight checklist before running mpdev verify:**
 1. Version files match: `schema.yaml`, `apptest/deployer/schema.yaml`, `Makefile`
 2. Images built with same TAG as `publishedVersion`
 3. Previous test namespaces cleaned up: `kubectl delete ns apptest-*`
-4. Vault data cleaned for fresh install (see below)
-
-**Cleaning stale vault data (required for fresh mpdev verify runs):**
-```bash
-# Flush Redis
-kubectl run redis-flush --rm -it --restart=Never --image=redis:7 -- \
-  redis-cli -h <REDIS_IP> -a "<redis-password>" FLUSHALL
-
-# Truncate vault tables in PostgreSQL (note: vault uses its own schema)
-kubectl run psql-cleanup --rm -i --restart=Never --image=postgres:15 -- \
-  psql "postgresql://tfe:<url-encoded-password>@<DB_IP>:5432/tfe?sslmode=require" <<EOF
-TRUNCATE vault.vault_kv_store CASCADE;
-TRUNCATE vault.vault_ha_locks CASCADE;
-EOF
-```
+4. Sufficient storage available for PVC
 
 ## GCP Marketplace Requirements
 
