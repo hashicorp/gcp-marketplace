@@ -18,7 +18,7 @@ metadata:
     {{- toYaml .Values.deployment.annotations | nindent 4 }}
   {{- end }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1  # Fixed at 1 for testing-only deployment
   selector:
     matchLabels:
       app: terraform-enterprise
@@ -58,6 +58,10 @@ spec:
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
       volumes:
+        # PersistentVolume for disk mode data storage
+        - name: terraform-enterprise-data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-tfe-data
         {{- if and .Values.tlsCertificate .Values.tlsPrivateKey }}
         # GCP Marketplace TLS certificates
         - name: certificates
@@ -68,11 +72,6 @@ spec:
           secret:
             secretName: {{ .Values.tls.certificateSecret }}
         {{- end }}
-        {{- if or (and .Values.tlsSecondary.certData .Values.tlsSecondary.keyData) .Values.tlsSecondary.certificateSecret }}
-        - name: certificates-secondary
-          secret:
-            secretName: {{ .Values.tlsSecondary.certificateSecret | default "terraform-enterprise-certificates-secondary" }}
-        {{- end }}
         {{- if .Values.tlsCACertificate }}
         # GCP Marketplace CA certificate
         - name: ca-certificates
@@ -82,16 +81,6 @@ spec:
         - name: ca-certificates
           secret:
             secretName: terraform-enterprise-ca-certificates
-        {{- end }}
-        {{- if and .Values.tlsRedis.certData .Values.tlsRedis.keyData .Values.tlsRedis.caCertData }}
-        - name: certificates-redis
-          secret:
-            secretName: {{ .Values.tlsRedis.certificateSecret | default "terraform-enterprise-certificates-redis" }}
-        {{- end }}
-        {{- if and .Values.tlsRedisSidekiq.certData .Values.tlsRedisSidekiq.keyData .Values.tlsRedisSidekiq.caCertData }}
-        - name: certificates-redis-sidekiq
-          secret:
-            secretName: {{ .Values.tlsRedisSidekiq.certificateSecret | default "terraform-enterprise-certificates-redis-sidekiq" }}
         {{- end }}
         {{- if .Values.csi.enabled }}
         - name: secrets-store
@@ -181,14 +170,9 @@ spec:
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         volumeMounts:
-          {{- if or (and .Values.tlsSecondary.certData .Values.tlsSecondary.keyData) .Values.tlsSecondary.certificateSecret }}
-          - name: certificates-secondary
-            mountPath: {{ .Values.tlsSecondary.certMountPath }}
-            subPath: tls.crt
-          - name: certificates-secondary
-            mountPath: {{ .Values.tlsSecondary.keyMountPath }}
-            subPath: tls.key        
-          {{- end }}  
+          # Disk mode data volume
+          - name: terraform-enterprise-data
+            mountPath: /var/lib/terraform-enterprise
           - name: certificates
             mountPath: {{ .Values.tls.certMountPath }}
             subPath: tls.crt
@@ -204,28 +188,6 @@ spec:
           - name: ca-certificates
             mountPath: {{ include "cacert.path" . }}
             subPath: {{ .Values.tls.caCertFileName }}
-          {{- end }}
-          {{- if and .Values.tlsRedis.certData .Values.tlsRedis.keyData .Values.tlsRedis.caCertData }}
-          - name: certificates-redis
-            mountPath: {{ .Values.tlsRedis.certMountPath }}
-            subPath: tls.crt
-          - name: certificates-redis
-            mountPath: {{ .Values.tlsRedis.keyMountPath }}
-            subPath: tls.key
-          - name: certificates-redis
-            mountPath: {{ .Values.tlsRedis.caCertMountPath }}
-            subPath: tls.ca
-          {{- end }}
-          {{- if and .Values.tlsRedisSidekiq.certData .Values.tlsRedisSidekiq.keyData .Values.tlsRedisSidekiq.caCertData }}
-          - name: certificates-redis-sidekiq
-            mountPath: {{ .Values.tlsRedisSidekiq.certMountPath }}
-            subPath: tls.crt
-          - name: certificates-redis-sidekiq
-            mountPath: {{ .Values.tlsRedisSidekiq.keyMountPath }}
-            subPath: tls.key
-          - name: certificates-redis-sidekiq
-            mountPath: {{ .Values.tlsRedisSidekiq.caCertMountPath }}
-            subPath: tls.ca
           {{- end }}
           {{- if .Values.csi.enabled }}
           - name: secrets-store

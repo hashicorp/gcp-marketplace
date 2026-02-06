@@ -1,38 +1,45 @@
 # Terraform Enterprise - GCP Marketplace
 
-HashiCorp Terraform Enterprise for GCP Marketplace using the **Kubernetes App (mpdev)** model with external managed services (Cloud SQL, Memorystore Redis, GCS).
+## ⚠️  TESTING ONLY - NOT FOR PRODUCTION ⚠️
+
+This GCP Marketplace deployment uses **disk mode** with a single replica and PersistentVolume. It is designed for **testing and evaluation purposes only**.
+
+**Limitations:**
+- Single instance (no high availability)
+- Data stored on PersistentVolume (no external backup/recovery)
+- Limited scalability and performance
+- Not suitable for production workloads
 
 ## Architecture
 
-Infrastructure is provisioned separately using Terraform before deploying TFE.
+Terraform Enterprise runs in disk mode using local PersistentVolume storage:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Phase 1: Infrastructure (Terraform)                            │
-│  └── terraform/ directory                                       │
-│      ├── Cloud SQL PostgreSQL                                   │
-│      ├── Memorystore Redis                                      │
-│      └── GCS Bucket                                             │
-├─────────────────────────────────────────────────────────────────┤
-│  Phase 2: Application (mpdev deployer)                          │
-│  └── Helm chart via deployer_helm                               │
-│      ├── TFE Deployment                                         │
-│      ├── UBB Agent Sidecar                                      │
-│      └── Services, ConfigMaps, Secrets                          │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  GKE Cluster                                         │
+│  ┌────────────────────────────────────────────────┐ │
+│  │ Terraform Enterprise Pod (single replica)      │ │
+│  │  ├── TFE Container (disk mode)                 │ │
+│  │  └── UBB Agent Sidecar                         │ │
+│  └────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────┐ │
+│  │ PersistentVolume (100Gi)                       │ │
+│  │  └── /var/lib/terraform-enterprise             │ │
+│  └────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 1. **GCP Project** with billing enabled
 2. **GKE Cluster** (1.33+ recommended)
-3. **Docker authenticated** to GCR:
+3. **Docker authenticated** to Artifact Registry:
    ```bash
-   gcloud auth configure-docker
+   gcloud auth configure-docker us-docker.pkg.dev
    ```
 4. **HashiCorp registry authenticated** (for building TFE image):
    ```bash
-   export TFE_LICENSE=$(cat "terraform exp Mar 31 2026.hclic")
+   export TFE_LICENSE=$(cat your-tfe-license.hclic)
    make registry/login
    ```
 5. **mpdev installed** (for verification):
@@ -44,19 +51,11 @@ Infrastructure is provisioned separately using Terraform before deploying TFE.
 ## Quick Start
 
 ```bash
-# 1. Provision infrastructure first
-cd products/terraform-enterprise/terraform
-terraform init
-terraform apply -var="project_id=YOUR_PROJECT_ID"
-
-# Get values for Marketplace form
-terraform output marketplace_inputs
-
-# 2. Build images
+# 1. Build images
 cd products/terraform-enterprise
 REGISTRY=gcr.io/$PROJECT_ID TAG=1.1.3 make app/build
 
-# 3. Run validation
+# 2. Run validation
 REGISTRY=gcr.io/$PROJECT_ID TAG=1.1.3 make app/verify
 ```
 
@@ -67,12 +66,13 @@ products/terraform-enterprise/
 ├── Makefile                     # Build targets for mpdev model
 ├── schema.yaml                  # GCP Marketplace schema (user inputs)
 ├── chart/
-│   └── terraform-enterprise/    # Helm chart for TFE
+│   └── terraform-enterprise/    # Helm chart for Terraform Enterprise
 │       ├── Chart.yaml
 │       ├── values.yaml
 │       └── templates/
-│           ├── deployment.yaml           # TFE Deployment with initContainer
-│           └── rbac.yaml                 # RBAC for resources
+│           ├── deployment.yaml  # TFE Deployment (single replica)
+│           ├── pvc.yaml         # PersistentVolumeClaim (100Gi)
+│           └── rbac.yaml        # RBAC for resources
 ├── deployer/
 │   └── Dockerfile               # Deployer image (deployer_helm base)
 ├── apptest/
@@ -82,14 +82,9 @@ products/terraform-enterprise/
 │       ├── Dockerfile
 │       ├── tester.sh
 │       └── tests/
-├── images/
-│   ├── tfe/Dockerfile           # TFE container image
-│   └── ubbagent/Dockerfile      # Usage-based billing agent
-└── terraform/                   # Infrastructure provisioning
-    ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
-    └── modules/infrastructure/
+└── images/
+    ├── tfe/Dockerfile           # TFE container image
+    └── ubbagent/Dockerfile      # Usage-based billing agent
 ```
 
 ## Makefile Targets
