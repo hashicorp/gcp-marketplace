@@ -8,7 +8,7 @@ x-google-marketplace:
   publishedVersion: '1.21.0'
   publishedVersionMetadata:
     releaseNote: >-
-      Initial release of HashiCorp Vault Enterprise on Google Cloud Marketplace.
+      Vault Enterprise for GCP Marketplace - Testing Only
     releaseTypes:
       - Feature
     recommended: true
@@ -35,14 +35,15 @@ x-google-marketplace:
   # Cluster requirements
   clusterConstraints:
     resources:
-      - replicas: 3
+      - replicas: 1
         requests:
           cpu: 500m
           memory: 256Mi
-        affinity:
-          simpleNodeAffinity:
-            type: REQUIRE_ONE_NODE_PER_REPLICA
     k8sVersion: ">=1.21.0"
+
+# ⚠️  TESTING ONLY - NOT FOR PRODUCTION ⚠️ 
+# This deployment uses file storage backend with a single replica.
+# It is designed for testing and evaluation purposes only.
 
 # User-configurable properties (displayed in Marketplace UI)
 properties:
@@ -58,26 +59,12 @@ properties:
     x-google-marketplace:
       type: NAMESPACE
 
-  # Vault server replicas
-  replicas:
-    type: integer
-    title: Vault Server Replicas
-    description: Number of Vault server pods to deploy
-    default: 3
-    minimum: 1
-    maximum: 5
-
-  # Storage class for persistent volumes
-  storageClass:
+  # Storage size for PersistentVolume
+  storageSize:
     type: string
-    title: Storage Class
-    description: Storage class for Vault data persistence
-    x-google-marketplace:
-      type: STORAGE_CLASS
-      storageClass:
-        type: SSD
-
-  # Storage size
+    title: Storage Size
+    description: Size of PersistentVolume for Vault Enterprise data (e.g., 100Gi)
+    default: "100Gi"
   storageSize:
     type: string
     title: Storage Size
@@ -101,11 +88,11 @@ properties:
   # Service account for Vault
   vaultServiceAccount:
     type: string
-    title: Vault Service Account
+    title: Vault Enterprise Service Account
     x-google-marketplace:
       type: SERVICE_ACCOUNT
       serviceAccount:
-        description: Service account for Vault server pods
+        description: Service account for Vault Enterprise server pods
         roles:
           - type: ClusterRole
             rulesType: CUSTOM
@@ -120,23 +107,23 @@ properties:
   # Vault server resources (user-configurable, conservative defaults for validation)
   vaultResourcesRequestsCpu:
     type: string
-    title: Vault CPU Request
-    description: CPU requested for each Vault server pod
+    title: Vault Enterprise CPU Request
+    description: CPU requested for Vault Enterprise server pod
     default: "500m"
   vaultResourcesRequestsMemory:
     type: string
-    title: Vault Memory Request
-    description: Memory requested for each Vault server pod
+    title: Vault Enterprise Memory Request
+    description: Memory requested for Vault Enterprise server pod
     default: "256Mi"
   vaultResourcesLimitsCpu:
     type: string
-    title: Vault CPU Limit
-    description: CPU limit for each Vault server pod
+    title: Vault Enterprise CPU Limit
+    description: CPU limit for Vault Enterprise server pod
     default: "2000m"
   vaultResourcesLimitsMemory:
     type: string
-    title: Vault Memory Limit
-    description: Memory limit for each Vault server pod
+    title: Vault Enterprise Memory Limit
+    description: Memory limit for Vault Enterprise server pod
     default: "1Gi"
 
   # Vault Enterprise license (required)
@@ -156,6 +143,6 @@ properties:
 required:
   - name
   - namespace
-  - replicas
+  - storageSize
   - vaultLicense
   - reportingSecret

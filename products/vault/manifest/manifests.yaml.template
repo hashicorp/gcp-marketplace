@@ -28,21 +28,11 @@ data:
 
     listener "tcp" {
       address = "[::]:8200"
-      cluster_address = "[::]:8201"
       tls_disable = true
     }
 
-    storage "raft" {
-      path = "/vault/data"
-      retry_join {
-        leader_api_addr = "http://$name-vault-0.$name-vault-internal.$namespace.svc.cluster.local:8200"
-      }
-      retry_join {
-        leader_api_addr = "http://$name-vault-1.$name-vault-internal.$namespace.svc.cluster.local:8200"
-      }
-      retry_join {
-        leader_api_addr = "http://$name-vault-2.$name-vault-internal.$namespace.svc.cluster.local:8200"
-      }
+    storage "file" {
+      path = "/vault/file"
     }
 
     service_registration "kubernetes" {}
@@ -50,30 +40,7 @@ data:
     disable_mlock = true
 
 ---
-# Headless service for StatefulSet DNS
-apiVersion: v1
-kind: Service
-metadata:
-  name: $name-vault-internal
-  namespace: $namespace
-  labels:
-    app.kubernetes.io/name: "$name"
-spec:
-  clusterIP: None
-  publishNotReadyAddresses: true
-  ports:
-    - name: http
-      port: 8200
-      targetPort: 8200
-    - name: https-internal
-      port: 8201
-      targetPort: 8201
-  selector:
-    app.kubernetes.io/name: "$name"
-    app.kubernetes.io/component: server
-
----
-# External service for Vault API
+# Single service for Vault API (no headless service needed for file backend)
 apiVersion: v1
 kind: Service
 metadata:
@@ -90,31 +57,27 @@ spec:
   selector:
     app.kubernetes.io/name: "$name"
     app.kubernetes.io/component: server
-    vault-active: "true"
 
 ---
-# UI Service
+# PersistentVolumeClaim for file backend storage
 apiVersion: v1
-kind: Service
+kind: PersistentVolumeClaim
 metadata:
-  name: $name-vault-ui
+  name: $name-vault-data
   namespace: $namespace
   labels:
     app.kubernetes.io/name: "$name"
 spec:
-  type: ClusterIP
-  ports:
-    - name: http
-      port: 8200
-      targetPort: 8200
-  selector:
-    app.kubernetes.io/name: "$name"
-    app.kubernetes.io/component: server
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "$storageSize"
 
 ---
-# Vault Server StatefulSet
+# Vault Server Deployment (single replica)
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: $name-vault
   namespace: $namespace
@@ -122,11 +85,7 @@ metadata:
     app.kubernetes.io/name: "$name"
     app.kubernetes.io/component: server
 spec:
-  serviceName: $name-vault-internal
-  replicas: $replicas
-  podManagementPolicy: Parallel
-  updateStrategy:
-    type: OnDelete
+  replicas: 1  # Fixed at 1 for testing-only deployment
   selector:
     matchLabels:
       app.kubernetes.io/name: "$name"
@@ -175,8 +134,6 @@ spec:
               value: "http://127.0.0.1:8200"
             - name: VAULT_API_ADDR
               value: "http://$(POD_IP):8200"
-            - name: VAULT_CLUSTER_ADDR
-              value: "http://$(POD_IP):8201"
             - name: SKIP_CHOWN
               value: "true"
             - name: SKIP_SETCAP
@@ -189,8 +146,6 @@ spec:
           ports:
             - name: http
               containerPort: 8200
-            - name: https-internal
-              containerPort: 8201
           # Readiness probe accepts sealed vault (exit 0 or 2)
           # Exit 0 = unsealed, Exit 2 = sealed but healthy
           readinessProbe:
@@ -222,7 +177,7 @@ spec:
             - name: config
               mountPath: /vault/config
             - name: data
-              mountPath: /vault/data
+              mountPath: /vault/file
 
         # Usage reporting sidecar (required for Marketplace billing)
         - name: ubbagent
@@ -256,22 +211,14 @@ spec:
         - name: config
           configMap:
             name: $name-vault-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: $name-vault-data
         - name: ubbagent-config
           configMap:
             name: $name-ubbagent-config
         - name: ubbagent-state
           emptyDir: {}
-
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        storageClassName: "$storageClass"
-        resources:
-          requests:
-            storage: "$storageSize"
 
 ---
 # UBB Agent ConfigMap (Usage-Based Billing)

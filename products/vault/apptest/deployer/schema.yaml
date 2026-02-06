@@ -20,26 +20,12 @@ properties:
     x-google-marketplace:
       type: NAMESPACE
 
-  # Override replicas for testing - single node simplifies init/unseal
-  replicas:
-    type: integer
-    default: 1
-
-  storageClass:
-    type: string
-    title: Storage Class
-    description: Storage class for Vault data persistence
-    default: standard
-    x-google-marketplace:
-      type: STORAGE_CLASS
-      storageClass:
-        type: SSD
-
+  # Storage size for test deployment (smaller than production default)
   storageSize:
     type: string
     title: Storage Size
-    description: Size of persistent volume for each Vault pod
-    default: "10Gi"
+    description: Size of persistent volume for Vault Enterprise data
+    default: "20Gi"
 
   # Vault Enterprise license (test default; overridden by validate-marketplace.sh when .hclic is present)
   vaultLicense:
