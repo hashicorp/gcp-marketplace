@@ -1,0 +1,161 @@
+# schema.yaml
+
+x-google-marketplace:
+  schemaVersion: v2
+  applicationApiVersion: v1beta1
+
+  # MUST match the deployer image tag
+  publishedVersion: '1.21.0'
+  publishedVersionMetadata:
+    releaseNote: >-
+      Initial release of HashiCorp Vault Enterprise on Google Cloud Marketplace.
+    releaseTypes:
+      - Feature
+    recommended: true
+
+  # Partner and product identifiers (must match Partner Portal)
+  partnerId: 0014M00001h317WQAQ
+  solutionId: vault
+
+  # All images must be declared here for security scanning
+  images:
+    vault:
+      properties:
+        imageVault:
+          type: FULL
+    vault-init:
+      properties:
+        imageVaultInit:
+          type: FULL
+    ubbagent:
+      properties:
+        imageUbbagent:
+          type: FULL
+
+  # Cluster requirements
+  clusterConstraints:
+    resources:
+      - replicas: 3
+        requests:
+          cpu: 500m
+          memory: 256Mi
+        affinity:
+          simpleNodeAffinity:
+            type: REQUIRE_ONE_NODE_PER_REPLICA
+    k8sVersion: ">=1.21.0"
+
+# User-configurable properties (displayed in Marketplace UI)
+properties:
+  # Required: App instance name
+  name:
+    type: string
+    x-google-marketplace:
+      type: NAME
+
+  # Required: Kubernetes namespace
+  namespace:
+    type: string
+    x-google-marketplace:
+      type: NAMESPACE
+
+  # Vault server replicas
+  replicas:
+    type: integer
+    title: Vault Server Replicas
+    description: Number of Vault server pods to deploy
+    default: 3
+    minimum: 1
+    maximum: 5
+
+  # Storage class for persistent volumes
+  storageClass:
+    type: string
+    title: Storage Class
+    description: Storage class for Vault data persistence
+    x-google-marketplace:
+      type: STORAGE_CLASS
+      storageClass:
+        type: SSD
+
+  # Storage size
+  storageSize:
+    type: string
+    title: Storage Size
+    description: Size of persistent volume for each Vault pod
+    default: "10Gi"
+
+  # Enable Vault UI
+  enableUI:
+    type: boolean
+    title: Enable Vault Web UI
+    description: Deploy the Vault web interface
+    default: true
+
+  # Enable Vault Agent Injector
+  enableInjector:
+    type: boolean
+    title: Enable Vault Agent Injector
+    description: Deploy sidecar injector for automatic secrets injection
+    default: true
+
+  # Service account for Vault
+  vaultServiceAccount:
+    type: string
+    title: Vault Service Account
+    x-google-marketplace:
+      type: SERVICE_ACCOUNT
+      serviceAccount:
+        description: Service account for Vault server pods
+        roles:
+          - type: ClusterRole
+            rulesType: CUSTOM
+            rules:
+              - apiGroups: [""]
+                resources: ["secrets"]
+                verbs: ["get", "list", "watch", "create", "update", "delete"]
+              - apiGroups: [""]
+                resources: ["pods"]
+                verbs: ["get", "list", "patch", "update"]
+
+  # Vault server resources (user-configurable, conservative defaults for validation)
+  vaultResourcesRequestsCpu:
+    type: string
+    title: Vault CPU Request
+    description: CPU requested for each Vault server pod
+    default: "500m"
+  vaultResourcesRequestsMemory:
+    type: string
+    title: Vault Memory Request
+    description: Memory requested for each Vault server pod
+    default: "256Mi"
+  vaultResourcesLimitsCpu:
+    type: string
+    title: Vault CPU Limit
+    description: CPU limit for each Vault server pod
+    default: "2000m"
+  vaultResourcesLimitsMemory:
+    type: string
+    title: Vault Memory Limit
+    description: Memory limit for each Vault server pod
+    default: "1Gi"
+
+  # Vault Enterprise license (required)
+  vaultLicense:
+    type: string
+    title: Vault Enterprise License
+    description: Vault Enterprise license string (contents of your .hclic file)
+    x-google-marketplace:
+      type: MASKED_FIELD
+
+  # Usage reporting secret (required for billing)
+  reportingSecret:
+    type: string
+    x-google-marketplace:
+      type: REPORTING_SECRET
+
+required:
+  - name
+  - namespace
+  - replicas
+  - vaultLicense
+  - reportingSecret
