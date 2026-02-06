@@ -185,23 +185,24 @@ Provides generic rules for:
 
 ## Product Comparison
 
-| Aspect | Terraform Enterprise | Vault | Consul | Boundary |
-|--------|---------------------|-------|--------|----------|
+| Aspect | Terraform Enterprise | Vault Enterprise | Consul | Boundary |
+|--------|---------------------|-----------------|--------|----------|
 | **Type** | Kubernetes App | Kubernetes App | Kubernetes App | VM Solution |
-| **Storage Mode** | External (Cloud SQL, Redis, GCS) | Integrated (Raft) | Integrated (Raft) | External (Cloud SQL) |
-| **Infrastructure** | Requires pre-provisioning | Self-contained | Self-contained | Terraform modules |
+| **Storage Mode** | Mounted Disk + PV (Testing Only) | File Backend + PV (Testing Only) | Integrated (Raft) | External (Cloud SQL) |
+| **Infrastructure** | Self-contained | Self-contained | Self-contained | Terraform modules |
 | **Registry Auth** | Required (images.releases.hashicorp.com) | Not required | Required | N/A (binary install) |
 | **UBB Agent** | Custom build (security patches) | Pulled from Google | Custom build | N/A |
-| **Complexity** | High (TLS, DB encoding, encryption) | Low (replicas, storage) | Medium (gossip, TLS) | High (KMS, workers, Cloud SQL) |
+| **Complexity** | Low (disk mode, single pod) | Low (file backend, single pod) | Medium (gossip, TLS) | High (KMS, workers, Cloud SQL) |
 
 ## Product-Specific Workflows
 
 ### Terraform Enterprise (Kubernetes)
 
+⚠️ **TESTING ONLY - NOT FOR PRODUCTION USE** ⚠️
+
 **Prerequisites:**
 ```bash
 docker login images.releases.hashicorp.com -u terraform -p $TFE_LICENSE
-cd products/terraform-enterprise/terraform && terraform apply  # Pre-provision infra
 ```
 
 **Validation:**
@@ -211,12 +212,14 @@ REGISTRY=gcr.io/$PROJECT_ID TAG=1.22.1 \
 ```
 
 **Key considerations:**
-- DATABASE_URL requires URL-encoded password (`/` → `%2F`)
-- ENC_PASSWORD must match TFE_ENCRYPTION_PASSWORD
-- Clean vault tables between mpdev verify runs
+- Uses disk mode with single replica (no HA)
+- All data stored on 100Gi PersistentVolume
+- No external services required (self-contained)
 - See `products/terraform-enterprise/CLAUDE.md`
 
-### Vault (Kubernetes)
+### Vault Enterprise (Kubernetes)
+
+⚠️ **TESTING ONLY - NOT FOR PRODUCTION USE** ⚠️
 
 **Prerequisites:**
 ```bash
@@ -234,7 +237,8 @@ REGISTRY=us-docker.pkg.dev/$PROJECT_ID/vault-marketplace TAG=1.21.0 \
 ```
 
 **Key considerations:**
-- Uses Raft integrated storage (no external DB)
+- Uses file backend with single replica (no HA)
+- All data stored on 100Gi PersistentVolume
 - Vault Enterprise images are on Docker Hub (no registry login needed)
 - License auto-detected from *.hclic file
 - UBB agent pulled directly from Google's registry

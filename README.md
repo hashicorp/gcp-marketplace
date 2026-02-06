@@ -6,8 +6,8 @@ This monorepo contains Google Cloud Marketplace packages for HashiCorp products.
 
 | Product | GCP Marketplace Type | Status | Description |
 |---------|---------------------|--------|-------------|
-| [Terraform Enterprise](products/terraform-enterprise/) | Kubernetes App (Click-to-Deploy) | Active | Terraform automation with external services (Cloud SQL, Redis, GCS) |
-| [Vault](products/vault/) | Kubernetes App (Click-to-Deploy) | Active | Secrets management with Raft integrated storage |
+| [Terraform Enterprise](products/terraform-enterprise/) | Kubernetes App (Click-to-Deploy) | Active | ⚠️ Testing-only: Terraform automation with disk mode and PersistentVolume (single replica) |
+| [Vault Enterprise](products/vault/) | Kubernetes App (Click-to-Deploy) | Active | ⚠️ Testing-only: Secrets management with file storage backend (single replica) |
 | [Consul](products/consul/) | Kubernetes App (Click-to-Deploy) | Active | Service mesh and service discovery |
 | [Terraform Cloud Agent](products/terraform-cloud-agent/) | Kubernetes App (Click-to-Deploy) | Active | Terraform Cloud remote execution agent |
 | [Boundary](products/boundary/) | VM Solution (Terraform Blueprint) | Active | Secure remote access with Cloud SQL, KMS, and worker proxies |
